@@ -1,30 +1,62 @@
-const getPrompt = (mode = "scene") => {
+const getPrompt = (mode,language = "en") => {
+    const languageInstruction =
+    language === "hi"
+    ?
+    `
+    Return all descriptions in Hindi.
 
+    Examples:
+    "आपके सामने एक कुर्सी है।"
+    "कोई बाधा नहीं मिली।"
+    `
+    :
+    `
+    Return all descriptions in English.
+    ` ;
     switch (mode) {
 
-        case "ocr":
-            return `
+       case "ocr":
+    return `
+You are an OCR assistant.
+
 Extract all visible text from the image.
 
-Return ONLY JSON:
+Return ONLY valid JSON.
 
 {
-    "text_detected": ""
+    "text_detected":""
 }
+
+Rules:
+- Preserve paragraphs.
+- Remove unnecessary line breaks caused by image formatting.
+- Return clean readable text.
+- If no text exists return exactly:
+"No text detected"
 `;
 
-        case "obstacle":
-            return `
-You are assisting a visually impaired user.
 
-Identify obstacles and safety hazards.
+       case "obstacle":
+    return `
+You are assisting a visually impaired person.
 
-Return ONLY JSON:
+Analyze the image for obstacles and navigation hazards.
+
+Return ONLY valid JSON.
 
 {
-    "obstacle_warning": "",
-    "objects": []
+    "obstacle_warning":"",
+    "safe_path":""
 }
+
+Rules:
+- Be concise.
+- Mention only important hazards.
+- If none exist return:
+"No obstacle detected"
+
+${languageInstruction}
+
 `;
 
         case "scene":
@@ -47,7 +79,10 @@ Rules:
 - obstacle_warning should be short
 - no markdown
 - no explanations
-`;
+${languageInstruction}
+`
+;
+
     }
 };
 

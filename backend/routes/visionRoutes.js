@@ -7,9 +7,6 @@ const {
 } = require("../controllers/visionController");
 
 router.post(
-  "/analyze",
-  upload.single("image"),
-  analyzeImage
-);
+  "/analyze", upload.single("image"), analyzeImage);
 
 module.exports = router;

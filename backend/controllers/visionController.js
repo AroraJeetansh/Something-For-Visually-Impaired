@@ -1,30 +1,55 @@
 const {
-  analyzeImageWithGemini
-} = require("../services/geminiService");
+    analyzeImageWithGemini
+} = require(
+    "../services/geminiService"
+);
 
 const analyzeImage = async (req, res) => {
 
-  try {
+    try {
 
-      const mode = req.body.mode || "scene";
+        if (!req.file) {
 
-    const result =
-      await analyzeImageWithGemini(req.file,
-        mode
-      );
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "Image is required"
+                });
+        }
 
-    res.json(result);
+        const mode =
+            req.body.mode || "scene";
+        const language = req.body.language || "en";
+        const result =
+            await analyzeImageWithGemini(
+                req.file,
+                mode,
+                language
+            );
 
-  } catch (error) {
+        if (!result.success) {
 
-    res.status(500).json({
-      error: error.message
-    });
+            return res
+                .status(500)
+                .json({
+                    error:
+                        result.error
+                });
+        }
+        res.json(result.data);
 
-  }
+    } catch (error) {
 
+        console.error(error);
+
+        res.status(500).json({
+            error:
+                "Internal Server Error"
+        });
+    }
 };
 
 module.exports = {
-  analyzeImage
+    analyzeImage
 };
