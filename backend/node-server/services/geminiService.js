@@ -1,4 +1,3 @@
-const fs = require("fs");
 const { GoogleGenAI } = require("@google/genai");
 
 const getPrompt = require("../utils/promptBuilder");

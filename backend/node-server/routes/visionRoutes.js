@@ -1,12 +1,18 @@
 const express = require("express");
+
 const router = express.Router();
 
-const upload = require("../middleware/uploadMiddleware");
+const upload =
+    require("../middleware/uploadMiddleware");
+
 const {
-  analyzeImage
+    analyzeImage
 } = require("../controllers/visionController");
 
 router.post(
-  "/analyze", upload.single("image"), analyzeImage);
+    "/analyze",
+    upload.single("image"),
+    analyzeImage
+);
 
 module.exports = router;
