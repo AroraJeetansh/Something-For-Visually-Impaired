@@ -1,34 +1,75 @@
 from transformers import pipeline
 import numpy as np
 
+# =====================================================
+# LOAD DEPTH MODEL
+# =====================================================
+
 depth_estimator = pipeline(
     task="depth-estimation",
     model="depth-anything/Depth-Anything-V2-Small-hf",
     local_files_only=True
 )
 
+# =====================================================
+# OBJECT PRIORITY
+# Higher = More Important
+# =====================================================
 
-def get_direction(box_center_x, image_width):
+OBJECT_PRIORITY = {
 
-    if box_center_x < image_width * 0.33:
+    "person": 1.00,
+
+    "stair": 0.95,
+
+    "door": 0.80,
+
+    "chair": 0.70,
+
+    "table": 0.60
+
+}
+
+
+# =====================================================
+# DIRECTION
+# =====================================================
+
+def get_direction(center_x, image_width):
+
+    left = image_width / 3
+    right = left * 2
+
+    if center_x < left:
         return "left"
 
-    elif box_center_x > image_width * 0.66:
+    elif center_x > right:
         return "right"
 
-    else:
-        return "center"
+    return "center"
 
+
+# =====================================================
+# MAIN
+# =====================================================
 
 def analyze_navigation(image, detections):
 
-    result = depth_estimator(image)
+    depth_result = depth_estimator(image)
 
-    depth_map = np.array(result["depth"])
+    depth_map = np.array(
+        depth_result["depth"]
+    )
 
-    depth_h, depth_w = depth_map.shape
+    depth_height, depth_width = depth_map.shape
+
+    max_depth = float(
+        np.max(depth_map)
+    )
 
     navigation_results = []
+
+    image_area = image.width * image.height
 
     for detection in detections:
 
@@ -36,66 +77,155 @@ def analyze_navigation(image, detections):
 
         x1, y1, x2, y2 = detection["box"]
 
-        # Convert YOLO coordinates
-        x1_d = int(x1 * depth_w / image.width)
-        x2_d = int(x2 * depth_w / image.width)
+        # ---------------------------------------
+        # Convert coordinates
+        # ---------------------------------------
 
-        y1_d = int(y1 * depth_h / image.height)
-        y2_d = int(y2 * depth_h / image.height)
+        x1_d = int(
+            x1 * depth_width / image.width
+        )
 
-        region = depth_map[y1_d:y2_d, x1_d:x2_d]
+        x2_d = int(
+            x2 * depth_width / image.width
+        )
+
+        y1_d = int(
+            y1 * depth_height / image.height
+        )
+
+        y2_d = int(
+            y2 * depth_height / image.height
+        )
+
+        region = depth_map[
+            y1_d:y2_d,
+            x1_d:x2_d
+        ]
 
         if region.size == 0:
             continue
 
-        avg_depth = np.median(region)
-        # Bounding box metrics
-        box_width = x2 - x1
-        box_height = y2 - y1
-        box_area = box_width * box_height
+        # ---------------------------------------
+        # DEPTH
+        # ---------------------------------------
 
-        # Direction
-        box_center_x = (x1 + x2) / 2
-
-        direction = get_direction(
-            box_center_x,
-            image.width
+        median_depth = float(
+            np.median(region)
         )
 
-        # Combined score
-        image_area = image.width * image.height
+        closeness = 1 - (
+            median_depth / max_depth
+        )
+
+        closeness = max(
+            0,
+            min(
+                closeness,
+                1
+            )
+        )
+
+        # ---------------------------------------
+        # BOX
+        # ---------------------------------------
+
+        box_width = x2 - x1
+
+        box_height = y2 - y1
+
+        box_area = box_width * box_height
 
         normalized_area = box_area / image_area
 
-        score = (
-        avg_depth * 0.5
-            +
-        normalized_area * 255 * 0.5
-                                    )
+        # ---------------------------------------
+        # DIRECTION
+        # ---------------------------------------
 
-        print("\n========================")
-        print("Object:", name)
-        print("Depth:", round(avg_depth, 2))
-        print("Width:", box_width)
-        print("Height:", box_height)
-        print("Area:", box_area)
-        print("Direction:", direction)
-        print("Score:", round(score, 2))
+        center_x = (x1 + x2) / 2
+
+        direction = get_direction(
+            center_x,
+            image.width
+        )
+
+        # ---------------------------------------
+        # OBJECT WEIGHT
+        # ---------------------------------------
+
+        object_weight = OBJECT_PRIORITY.get(
+            name,
+            0.50
+        )
+
+        # ---------------------------------------
+        # FINAL PRIORITY
+        # ---------------------------------------
+
+        priority = (
+
+            0.60 * closeness +
+
+            0.30 * normalized_area +
+
+            0.10 * object_weight
+
+        )
 
         navigation_results.append({
+
             "object": name,
-            "depth": round(avg_depth, 2),
+
+            "confidence": detection["confidence"],
+
+            "direction": direction,
+
+            "depth": round(
+                median_depth,
+                2
+            ),
+
+            "closeness": round(
+                closeness,
+                2
+            ),
+
             "box_width": box_width,
+
             "box_height": box_height,
+
             "box_area": box_area,
-            "score": round(score, 2),
-            "direction": direction
+
+            "priority": round(
+                priority,
+                3
+            )
+
         })
 
-    # Highest score first
     navigation_results.sort(
-        key=lambda x: x["score"],
+
+        key=lambda x: x["priority"],
+
         reverse=True
+
     )
+
+    print("\nNavigation Ranking")
+
+    print("=" * 50)
+
+    for item in navigation_results:
+
+        print(
+
+            f"{item['object']:10}"
+
+            f"Priority={item['priority']:.3f} "
+
+            f"Depth={item['depth']:.1f} "
+
+            f"{item['direction']}"
+
+        )
 
     return navigation_results
