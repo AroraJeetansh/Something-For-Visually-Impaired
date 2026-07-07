@@ -1,9 +1,16 @@
 from transformers import pipeline
+from PIL import Image
 import numpy as np
+import time
 
-# =====================================================
+from services.path_planner import plan_path
+from services.speech_service import build_navigation_speech
+from services.scene_memory import SceneMemory
+from services.distance_estimator import classify_distance
+
+# ==========================================================
 # LOAD DEPTH MODEL
-# =====================================================
+# ==========================================================
 
 depth_estimator = pipeline(
     task="depth-estimation",
@@ -11,51 +18,82 @@ depth_estimator = pipeline(
     local_files_only=True
 )
 
-# =====================================================
-# OBJECT PRIORITY
-# Higher = More Important
-# =====================================================
+# ==========================================================
+# CONFIG
+# ==========================================================
 
-OBJECT_PRIORITY = {
+MAX_DEPTH_SIZE = 640
 
-    "person": 1.00,
+# ==========================================================
+# HELPERS
+# ==========================================================
 
-    "stair": 0.95,
+def prepare_depth_image(image):
 
-    "door": 0.80,
+    original_width, original_height = image.size
 
-    "chair": 0.70,
+    depth_image = image.copy()
 
-    "table": 0.60
+    depth_image.thumbnail(
+        (MAX_DEPTH_SIZE, MAX_DEPTH_SIZE),
+        Image.Resampling.LANCZOS
+    )
 
-}
+    scale_x = depth_image.width / original_width
+    scale_y = depth_image.height / original_height
 
+    return depth_image, scale_x, scale_y
 
-# =====================================================
-# DIRECTION
-# =====================================================
 
 def get_direction(center_x, image_width):
 
-    left = image_width / 3
-    right = left * 2
+    ratio = center_x / image_width
 
-    if center_x < left:
+    if ratio < 0.20:
+        return "far_left"
+
+    elif ratio < 0.40:
         return "left"
 
-    elif center_x > right:
+    elif ratio < 0.60:
+        return "center"
+
+    elif ratio < 0.80:
         return "right"
 
-    return "center"
+    return "far_right"
 
-
-# =====================================================
+# ==========================================================
 # MAIN
-# =====================================================
+# ==========================================================
 
-def analyze_navigation(image, detections):
+def analyze_navigation(image, detections, scene_memory: SceneMemory):
+    """
+    scene_memory: the caller's per-session SceneMemory instance
+    (see services/session_memory_store.py). Passing it in here, rather
+    than creating one inside this function, is what lets memory persist
+    correctly across requests for the same user without leaking into
+    other users' sessions.
+    """
 
-    depth_result = depth_estimator(image)
+    print("\nStarting Navigation Analysis...")
+
+    depth_image, scale_x, scale_y = prepare_depth_image(image)
+
+    print(
+        "Depth Input Size:",
+        depth_image.size
+    )
+
+    start = time.time()
+
+    depth_result = depth_estimator(
+        depth_image
+    )
+
+    print(
+        f"Depth Model       : {time.time()-start:.2f}s"
+    )
 
     depth_map = np.array(
         depth_result["depth"]
@@ -67,34 +105,44 @@ def analyze_navigation(image, detections):
         np.max(depth_map)
     )
 
-    navigation_results = []
-
     image_area = image.width * image.height
+
+    objects = []
+
+    processing_start = time.time()
 
     for detection in detections:
 
         name = detection["name"]
 
+        confidence = detection["confidence"]
+
         x1, y1, x2, y2 = detection["box"]
 
-        # ---------------------------------------
-        # Convert coordinates
-        # ---------------------------------------
+        x1_d = int(x1 * scale_x)
+        x2_d = int(x2 * scale_x)
 
-        x1_d = int(
-            x1 * depth_width / image.width
+        y1_d = int(y1 * scale_y)
+        y2_d = int(y2 * scale_y)
+
+        x1_d = max(
+            0,
+            min(x1_d, depth_width - 1)
         )
 
-        x2_d = int(
-            x2 * depth_width / image.width
+        x2_d = max(
+            0,
+            min(x2_d, depth_width)
         )
 
-        y1_d = int(
-            y1 * depth_height / image.height
+        y1_d = max(
+            0,
+            min(y1_d, depth_height - 1)
         )
 
-        y2_d = int(
-            y2 * depth_height / image.height
+        y2_d = max(
+            0,
+            min(y2_d, depth_height)
         )
 
         region = depth_map[
@@ -104,10 +152,6 @@ def analyze_navigation(image, detections):
 
         if region.size == 0:
             continue
-
-        # ---------------------------------------
-        # DEPTH
-        # ---------------------------------------
 
         median_depth = float(
             np.median(region)
@@ -119,15 +163,8 @@ def analyze_navigation(image, detections):
 
         closeness = max(
             0,
-            min(
-                closeness,
-                1
-            )
+            min(closeness, 1)
         )
-
-        # ---------------------------------------
-        # BOX
-        # ---------------------------------------
 
         box_width = x2 - x1
 
@@ -135,11 +172,9 @@ def analyze_navigation(image, detections):
 
         box_area = box_width * box_height
 
-        normalized_area = box_area / image_area
-
-        # ---------------------------------------
-        # DIRECTION
-        # ---------------------------------------
+        normalized_area = (
+            box_area / image_area
+        )
 
         center_x = (x1 + x2) / 2
 
@@ -148,34 +183,14 @@ def analyze_navigation(image, detections):
             image.width
         )
 
-        # ---------------------------------------
-        # OBJECT WEIGHT
-        # ---------------------------------------
-
-        object_weight = OBJECT_PRIORITY.get(
-            name,
-            0.50
-        )
-
-        # ---------------------------------------
-        # FINAL PRIORITY
-        # ---------------------------------------
-
-        priority = (
-
-            0.60 * closeness +
-
-            0.30 * normalized_area +
-
-            0.10 * object_weight
-
-        )
-
-        navigation_results.append({
+        objects.append({
 
             "object": name,
 
-            "confidence": detection["confidence"],
+            "confidence": round(
+                confidence,
+                2
+            ),
 
             "direction": direction,
 
@@ -186,46 +201,160 @@ def analyze_navigation(image, detections):
 
             "closeness": round(
                 closeness,
-                2
+                3
             ),
 
-            "box_width": box_width,
+            "normalized_area": round(
+                normalized_area,
+                4
+            ),
 
-            "box_height": box_height,
-
-            "box_area": box_area,
-
-            "priority": round(
-                priority,
-                3
-            )
+            "box": [
+                x1,
+                y1,
+                x2,
+                y2
+            ]
 
         })
 
-    navigation_results.sort(
+    # ---------------------------------------
+    # Processing Time
+    # ---------------------------------------
 
-        key=lambda x: x["priority"],
+    print(
+        f"Object Processing : {time.time()-processing_start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Distance Classification
+    # ---------------------------------------
+
+    distance_start = time.time()
+
+    objects = classify_distance(
+        objects,
+        depth_map
+    )
+
+    print(
+        f"Distance Labels   : {time.time()-distance_start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Sort Objects
+    # ---------------------------------------
+
+    sort_start = time.time()
+
+    objects.sort(
+
+        key=lambda x: (
+            x["closeness"],
+            x["normalized_area"]
+        ),
 
         reverse=True
 
     )
 
-    print("\nNavigation Ranking")
+    objects = objects[:3]
 
+    print(
+        f"Sorting           : {time.time()-sort_start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Path Planner
+    # ---------------------------------------
+
+    planner_start = time.time()
+
+    path = plan_path(
+        objects
+    )
+
+    print(
+        f"Path Planner      : {time.time()-planner_start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Scene Memory
+    # ---------------------------------------
+
+    memory_start = time.time()
+
+    annotated_objects, path_just_cleared = scene_memory.update(
+        objects,
+        path
+    )
+
+    print(
+        f"Scene Memory      : {time.time()-memory_start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Speech
+    # ---------------------------------------
+
+    speech_start = time.time()
+
+    speech = build_navigation_speech(
+
+        objects,
+
+        path,
+
+        annotated_objects=annotated_objects,
+
+        path_just_cleared=path_just_cleared
+
+    )
+
+    print(
+        f"Speech            : {time.time()-speech_start:.2f}s"
+    )
+
+    print(
+        f"Navigation Total  : {time.time()-start:.2f}s"
+    )
+
+    # ---------------------------------------
+    # Debug
+    # ---------------------------------------
+
+    print("\nNavigation Summary")
     print("=" * 50)
 
-    for item in navigation_results:
+    for obj in annotated_objects:
 
         print(
 
-            f"{item['object']:10}"
+            f"{obj['object']:15}"
 
-            f"Priority={item['priority']:.3f} "
+            f"{obj['direction']:10}"
 
-            f"Depth={item['depth']:.1f} "
+            f"Close={obj['closeness']:.2f}  "
 
-            f"{item['direction']}"
+            f"Status={obj.get('status')}"
 
         )
 
-    return navigation_results
+    print("=" * 50)
+    print("Suggested Path:", path)
+    print("Speech:", speech)
+    print("=" * 50)
+
+    # ---------------------------------------
+    # Return
+    # ---------------------------------------
+
+    return {
+
+        "results": annotated_objects,
+
+        "path": path,
+
+        "speech": speech
+
+    }

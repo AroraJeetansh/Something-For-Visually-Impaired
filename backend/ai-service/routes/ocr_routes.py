@@ -1,8 +1,23 @@
-from fastapi import APIRouter, UploadFile, File
-from services.ocr_service import extract_text
-from utils.image_utils import save_upload_file
-from utils.response_utils import success_response
 import os
+import time
+
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File
+)
+
+from services.ocr_service import (
+    extract_text
+)
+
+from utils.image_utils import (
+    save_upload_file
+)
+
+from utils.response_utils import (
+    success_response
+)
 
 router = APIRouter()
 
@@ -14,21 +29,42 @@ async def ocr(
 
     filename = save_upload_file(image)
 
+    start = time.time()
+
     try:
 
-        text = extract_text(filename)
+        texts = extract_text(
+            filename
+        )
 
-        if not text.strip():
-            text = "No text detected"
+        print(
+            f"OCR Time: {time.time()-start:.2f}s"
+        )
+
+        if len(texts) == 0:
+
+            speech = "No text detected."
+
+        else:
+
+            speech = " ".join(texts)
+
         return success_response(
+
             "ocr",
+
             {
-                "text": text,
-                "speech": text
+
+                "texts": texts,
+
+                "speech": speech
+
             }
+
         )
 
     finally:
 
         if os.path.exists(filename):
+
             os.remove(filename)

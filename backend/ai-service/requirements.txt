@@ -7,6 +7,5 @@ ultralytics
 paddleocr
 paddlepaddle
 
-opencv-python
 numpy
 Pillow
