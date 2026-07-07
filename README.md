@@ -1,301 +1,332 @@
-# Smart Vision Assistant Backend
+# AI-Powered Offline Smart Navigation Assistant Backend
 
-An AI-powered backend for a Smart Vision Assistant designed to help visually impaired users understand and navigate their surroundings through image analysis.
+An AI-powered backend developed for an Offline Smart Navigation Assistant designed to assist visually impaired users by analyzing their surroundings using Computer Vision and Artificial Intelligence.
 
-The system leverages **Google Gemini Vision** to provide:
+The backend processes images captured by a client application and performs:
 
-- OCR (Text Reading)
-- Scene Understanding
-- Obstacle Awareness
-- Object Identification
+- Object Detection
+- Monocular Depth Estimation
+- Distance Classification
+- Intelligent Path Planning
+- Scene Memory
+- Navigation Instruction Generation
+- Optical Character Recognition (OCR)
 
-This backend is designed to be integrated with future platforms such as:
-
-- Smart Glasses
-- Mobile Applications
-- Wearable Devices
-- Accessibility Assistants
+The system has been designed with an offline-first architecture and serves as the core processing engine for future Android applications and wearable smart glasses.
 
 ---
 
-## Features
+# Features
 
-### Scene Analysis
+## Object Detection
 
-Provides a concise description of the environment.
+Detects common everyday objects along with navigation-specific obstacles using a customized YOLOv8 model.
 
-**Example Response**
+Examples:
+
+- Person
+- Chair
+- Bottle
+- Door
+- Staircase Up
+- Staircase Down
+
+---
+
+## Depth Estimation
+
+Generates a dense depth map from a single RGB image using **Depth Anything V2**, enabling relative distance estimation without requiring specialized hardware.
+
+---
+
+## Distance Estimation
+
+Classifies detected objects into qualitative distance categories.
+
+- Very Close
+- Close
+- Medium
+- Far
+
+---
+
+## Intelligent Path Planning
+
+Analyzes detected objects and recommends the safest navigation direction by evaluating:
+
+- Object proximity
+- Object size
+- Navigation sector
+- Risk score
+
+---
+
+## Scene Memory
+
+Maintains contextual information across consecutive frames to reduce repetitive navigation instructions.
+
+Object states include:
+
+- New
+- Still
+- Approaching
+- Moving Away
+
+---
+
+## Speech Generation
+
+Produces concise navigation instructions such as:
+
+> "Person ahead. Move slightly left."
+
+> "Staircase on your right."
+
+> "Continue straight."
+
+---
+
+## Optical Character Recognition (OCR)
+
+Extracts printed text from images using PaddleOCR.
+
+Example:
 
 ```json
 {
-  "scene_description": "Blue bird perched on a flowering branch.",
-  "text_detected": "No text detected",
-  "objects": [
-    "bird",
-    "flowers",
-    "branch"
-  ],
-  "obstacle_warning": "No obstacle detected"
+  "text": "EXIT"
 }
 ```
 
 ---
 
-### OCR Mode
+# Technology Stack
 
-Extracts all visible text from an image.
+## Backend
 
-**Example Response**
+- FastAPI
+- Python
 
-```json
-{
-  "text_detected": "Welcome to JUIT"
-}
+## Computer Vision
+
+- Customized YOLOv8
+- Depth Anything V2
+- PaddleOCR
+- Pillow (PIL)
+
+## AI Libraries
+
+- Ultralytics
+- Hugging Face Transformers
+
+## Development
+
+- Swagger UI
+- Git
+- GitHub
+
+---
+
+# Backend Architecture
+
+```text
+Client Application
+        │
+        ▼
+     FastAPI Backend
+        │
+        ▼
+Object Detection (YOLOv8)
+        │
+        ▼
+Depth Estimation
+        │
+        ▼
+Distance Estimation
+        │
+        ▼
+Path Planning
+        │
+        ▼
+Scene Memory
+        │
+        ▼
+Speech Generation
+        │
+        ▼
+JSON Response
 ```
 
 ---
 
-### Obstacle Detection Mode
-
-Identifies potential navigation hazards.
-
-**Example Response**
-
-```json
-{
-  "obstacle_warning": "Chair ahead",
-  "safe_path": "Move slightly right"
-}
-```
-
----
-
-## Tech Stack
-
-### Backend
-
-- Node.js
-- Express.js
-
-### AI
-
-- Google Gemini 2.5 Flash Vision
-
-### File Handling
-
-- Multer
-
-### Environment Management
-
-- dotenv
-
----
-
-## Project Structure
+# Project Structure
 
 ```text
 backend/
 │
-├── server.js
-│
 ├── routes/
-│   └── visionRoutes.js
-│
-├── controllers/
-│   └── visionController.js
+│   ├── navigation.py
+│   ├── object_detection.py
+│   └── ocr.py
 │
 ├── services/
-│   └── geminiService.js
+│   ├── object_detector.py
+│   ├── depth_estimator.py
+│   ├── distance_estimator.py
+│   ├── path_planner.py
+│   ├── scene_memory.py
+│   ├── speech_service.py
+│   ├── navigation_service.py
+│   └── ocr_service.py
 │
-├── middleware/
-│   └── uploadMiddleware.js
+├── models/
+│   └── combined.pt
 │
-├── utils/
-│   └── promptBuilder.js
+├── main.py
 │
-├── uploads/
-│
-├── .env
-│
-└── package.json
+└── requirements.txt
 ```
 
 ---
 
-## Installation
+# Installation
 
-### Clone the Repository
+Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/<username>/<repository>.git
 cd backend
 ```
 
-### Install Dependencies
+Create a virtual environment
 
 ```bash
-npm install
+python -m venv venv
 ```
 
----
+Activate it
 
-## Environment Variables
-
-Create a `.env` file in the root directory.
-
-```env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-```
-
-Get your API key from:
-
-https://aistudio.google.com/
-
----
-
-## Running the Server
-
-Start the application:
+Windows
 
 ```bash
-node server.js
+venv\Scripts\activate
 ```
 
-Server will run on:
+Linux / macOS
 
-```text
-http://localhost:5000
+```bash
+source venv/bin/activate
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
 ---
 
-## API Endpoint
+# Running the Backend
 
-### Analyze Image
+```bash
+uvicorn main:app --reload
+```
+
+The server will start at
+
+```
+http://127.0.0.1:8000
+```
+
+Swagger Documentation
+
+```
+http://127.0.0.1:8000/docs
+```
+
+---
+
+# Available APIs
+
+## Navigation
 
 ```http
-POST /api/vision/analyze
+POST /navigation
 ```
 
-### Content Type
+Returns:
 
-```text
-multipart/form-data
-```
-
-### Parameters
-
-| Parameter | Type | Description |
-|------------|------|-------------|
-| image | File | Image to analyze |
-| mode | String | scene, ocr, obstacle |
+- Detected Objects
+- Distance Labels
+- Navigation Path
+- Scene Memory Status
+- Speech Instruction
 
 ---
 
-## Scene Mode
+## OCR
 
-### Request
-
-```text
-mode=scene
+```http
+POST /ocr
 ```
 
-### Response
+Returns extracted text from an uploaded image.
+
+---
+
+## Health Check
+
+```http
+GET /health
+```
+
+Returns the backend status.
+
+---
+
+# Sample Navigation Response
 
 ```json
 {
-  "scene_description": "Person sitting at a desk.",
-  "text_detected": "No text detected",
-  "objects": [
-    "person",
-    "laptop",
-    "chair"
+  "results": [
+    {
+      "object": "person",
+      "distance_label": "Close",
+      "direction": "center",
+      "status": "approaching"
+    }
   ],
-  "obstacle_warning": "No obstacle detected"
+  "path": {
+    "safe_direction": "left",
+    "danger": true
+  },
+  "speech": "Person ahead. Move slightly left."
 }
 ```
 
 ---
 
-## OCR Mode
+# Future Enhancements
 
-### Request
-
-```text
-mode=ocr
-```
-
-### Response
-
-```json
-{
-  "text_detected": "Department of Computer Science"
-}
-```
-
----
-
-## Obstacle Mode
-
-### Request
-
-```text
-mode=obstacle
-```
-
-### Response
-
-```json
-{
-  "obstacle_warning": "Table ahead",
-  "safe_path": "Move slightly left"
-}
-```
-
----
-
-## Testing with Postman
-
-1. Create a **POST** request
-2. URL:
-
-```text
-http://localhost:5000/api/vision/analyze
-```
-
-3. Select **Body → form-data**
-4. Add:
-
-| Key | Type | Value |
-|------|------|------|
-| image | File | Upload image |
-| mode | Text | scene / ocr / obstacle |
-
-5. Click **Send**
-
----
-
-## Future Enhancements
-
-- Real-time video analysis
-- Voice commands
-- Text-to-Speech feedback
-- Mobile application integration
+- Android application integration
 - Smart glasses integration
-- Face recognition
-- Currency recognition
-- Indoor navigation assistance
-- Offline AI inference
+- Automatic session-based Scene Memory
+- Real-time video navigation
+- On-device model optimization
+- Advanced navigation algorithms
+- Handwritten OCR
+- Voice interaction
+- Visual Question Answering (VQA)
 
 ---
 
-## Project Vision
+# Project Vision
 
-The long-term vision of this project is to develop an intelligent wearable assistant capable of helping visually impaired individuals understand, interpret, and navigate the world around them using AI-powered computer vision and natural language technologies.
+The goal of this project is to build an intelligent, offline-first assistive navigation system capable of helping visually impaired users safely understand and navigate their surroundings using Artificial Intelligence and Computer Vision.
 
 ---
 
-## Author
+# Author
 
 **Jeetansh Arora**
 
@@ -304,4 +335,4 @@ Jaypee University of Information Technology (JUIT)
 
 ---
 
-### If you find this project useful, consider starring the repository.
+⭐ If you found this project useful, consider starring the repository.
